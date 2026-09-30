@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Controle de Máscaras</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:13px Arial,sans-serif;background:#f4f6f8;color:#20242a}
+header{background:#17202a;color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+header h1{font-size:18px;margin:0}button{border:0;border-radius:6px;padding:7px 10px;cursor:pointer;font-weight:600}
+.btn{background:#2563eb;color:#fff}.btn.gray{background:#64748b}.btn.green{background:#16a34a}.btn.red{background:#dc2626}.btn.dark{background:#334155}
+main{max-width:1100px;margin:12px auto;padding:0 10px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px}
+.card{background:#fff;border:1px solid #e1e5e9;border-radius:8px;padding:9px}.card small{color:#68717c}.num{font-size:21px;font-weight:700;margin-top:3px}
+.panel{background:#fff;border:1px solid #e1e5e9;border-radius:8px;padding:10px;margin-bottom:10px}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.toolbar input,.toolbar select{height:32px}
+input,select,textarea{width:100%;border:1px solid #cbd2d9;border-radius:5px;padding:7px;background:#fff}
+.toolbar input,.toolbar select{width:auto;padding:5px 7px}
+h2{font-size:14px;margin:0 0 8px}
+.formgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.field label{display:block;font-size:11px;font-weight:bold;color:#59636e;margin-bottom:3px}
+.full{grid-column:1/-1}.half{grid-column:span 2}
+.actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+#lista{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}
+.item{border:1px solid #dde2e7;border-radius:7px;padding:8px;background:#fff}
+.itemtop{display:flex;justify-content:space-between;gap:8px}.plate{font-weight:700;font-size:14px}
+.badge{font-size:10px;border-radius:10px;padding:3px 7px;background:#fee2e2;color:#991b1b;white-space:nowrap}
+.badge.ok{background:#dcfce7;color:#166534}
+.meta{color:#65707b;font-size:11px;margin:5px 0}
+.item .actions button{font-size:11px;padding:5px 7px}
+.report{overflow:auto}.report table{width:100%;border-collapse:collapse}.report th,.report td{padding:6px;border-bottom:1px solid #e5e7eb;text-align:center}.report th{background:#f1f5f9}
+.modal{display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center;padding:15px;z-index:5}.modal.show{display:flex}
+.modalbox{background:#fff;width:min(760px,100%);max-height:90vh;border-radius:8px;padding:12px;display:flex;flex-direction:column}.modalbox textarea{height:390px;font:12px Consolas,monospace;resize:none}
+.closex{float:right;background:#e2e8f0}
+.hidden{display:none!important}
+@media(max-width:800px){.grid{grid-template-columns:repeat(2,1fr)}.formgrid{grid-template-columns:repeat(2,1fr)}#lista{grid-template-columns:1fr}}
+@media(max-width:500px){.formgrid{grid-template-columns:1fr}.half{grid-column:auto}}
+
+:root{
+  --bg:#f4f6f8;--text:#20242a;--header:#17202a;--surface:#fff;
+  --border:#e1e5e9;--input:#fff;--muted:#68717c;--table:#f1f5f9;
+}
+body{background:var(--bg);color:var(--text)}
+.card,.panel,.item,.modalbox{background:var(--surface);border-color:var(--border)}
+.card small,.meta{color:var(--muted)}
+input,select,textarea{background:var(--input);color:var(--text);border-color:#cbd2d9}
+.report th{background:var(--table)}
+body.dark{
+  --bg:#0f172a;--text:#e5e7eb;--header:#020617;--surface:#1e293b;
+  --border:#334155;--input:#0f172a;--muted:#94a3b8;--table:#334155;
+}
+body.dark input,body.dark select,body.dark textarea{border-color:#475569}
+body.dark .closex{background:#334155;color:#e5e7eb}
+body.dark .badge{background:#451a1a;color:#fecaca}
+body.dark .badge.ok{background:#14532d;color:#bbf7d0}
+</style>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<header>
+  <h1>📋 Controle de Máscaras</h1>
+  <div class="toolbar">
+    <button class="btn green" onclick="abrirCadastro()">+ Nova</button>
+    <button class="btn gray" onclick="exportar()">💾 Backup</button>
+    <button class="btn dark" id="loginBtn" onclick="entrarGoogle()">☁️ Entrar</button>
+    <button class="btn gray hidden" id="logoutBtn" onclick="sairGoogle()">Sair</button>
+    <span id="cloudStatus" style="font-size:11px;opacity:.9">☁️ Offline</span>
+
+    <button class="btn dark" id="themeBtn" onclick="alternarTema()">🌙 Escuro</button>
+    <label><input id="importFile" type="file" accept=".json" hidden onchange="importar(event)"><button class="btn gray" onclick="importFile.click()">↥ Restaurar</button></label>
+  </div>
+</header>
+
+
+<div id="configAviso" class="panel" style="display:none;max-width:1100px;margin:12px auto">
+  <b>Configuração necessária:</b> abra o arquivo e preencha <code>FIREBASE_CONFIG</code> com os dados do seu projeto Firebase.
+</div>
+<main>
+  <div class="grid">
+    <div class="card"><small>Total</small><div class="num" id="cTotal">0</div></div>
+    <div class="card"><small>Não fechadas</small><div class="num" id="cAberta">0</div></div>
+    <div class="card"><small>Fechadas</small><div class="num" id="cFechada">0</div></div>
+    <div class="card"><small>Hoje</small><div class="num" id="cHoje">0</div></div>
+    <div class="card"><small>Semana</small><div class="num" id="cSemana">0</div></div>
+  </div>
+
+  <section class="panel">
+    <h2>🔎 Filtros</h2>
+    <div class="toolbar">
+      <input id="busca" placeholder="Placa, IMEI, instalador..." oninput="render()">
+      <select id="filtroTipo" onchange="render()">
+        <option value="">Todos os tipos</option>
+        <option>INSTALAÇÃO</option><option>MANUTENÇÃO COM TROCA</option>
+        <option>MANUTENÇÃO SEM TROCA</option><option>RETIRADA</option>
+      </select>
+      <input id="filtroData" type="date" onchange="render()">
+      <button class="btn dark" onclick="limparFiltros()">Limpar</button>
+    </div>
+  </section>
+
+  <section class="panel" id="cadastro" style="display:none">
+    <h2 id="formTitle">Nova máscara</h2>
+    <div class="formgrid">
+      <div class="field"><label>Tipo</label><select id="tipo" onchange="ajustarCampos()">
+        <option>INSTALAÇÃO</option><option>MANUTENÇÃO COM TROCA</option>
+        <option>MANUTENÇÃO SEM TROCA</option><option>RETIRADA</option>
+      </select></div>
+      <div class="field"><label>Placa / Chassi</label><input id="placa"></div>
+      <div class="field"><label>Plataforma</label><input id="plataforma"></div>
+      <div class="field"><label>IMEI</label><input id="imei"></div>
+      <div class="field" id="instaladorBox"><label>Instalação/Retirada realizada por</label><input id="instalador"></div>
+      <div class="field" id="dataBox"><label>Data e horário</label><input id="dataHora" type="datetime-local"></div>
+      <div class="field" id="latBox"><label>Latitude</label><input id="latitude"></div>
+      <div class="field" id="lonBox"><label>Longitude</label><input id="longitude"></div>
+      <div class="field half" id="localBox"><label>Local instalado no veículo</label><input id="local"></div>
+      <div class="field" id="imeiRetBox"><label>IMEI retirado</label><input id="imeiRetirado"></div>
+      <div class="field full" id="motivoBox"><label>Motivo da manutenção</label><input id="motivo" value="Não estava comunicando em conformidade"></div>
+      <div class="field full"><label>OBS</label><textarea id="obs" rows="2"></textarea></div>
+    </div>
+    <div class="actions">
+      <button class="btn green" onclick="salvarMascara()">Salvar</button>
+      <button class="btn gray" onclick="fecharCadastro()">Cancelar</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>📊 Relatório semanal — segunda a sábado</h2>
+    <div class="toolbar" style="margin-bottom:7px">
+      <label>Semana: <input id="semana" type="date" onchange="renderRelatorio()"></label>
+    </div>
+    <div class="report" id="relatorio"></div>
+  </section>
+
+  <section class="panel">
+    <h2>📌 Máscaras</h2>
+    <div id="lista"></div>
+  </section>
+</main>
+
+<div class="modal" id="modal">
+  <div class="modalbox">
+    <div><b>Máscara</b><button class="closex" onclick="fecharModal()">✕</button></div>
+    <textarea id="textoMascara" readonly></textarea>
+    <div class="actions"><button class="btn" onclick="copiarModal()">📋 Copiar</button></div>
+  </div>
+</div>
+
+<script>
+const KEY="controle_mascaras_v3";
+let mascaras=JSON.parse(localStorage.getItem(KEY)||"[]");
+let editando=null;
+let db=null, auth=null, usuario=null, unsubscribeCloud=null;
+
+// CONFIGURAÇÃO: substitua os valores abaixo pelos dados do seu app Web do Firebase.
+const FIREBASE_CONFIG = {
+  apiKey: "COLOQUE_SUA_API_KEY",
+  authDomain: "COLOQUE_SEU_PROJETO.firebaseapp.com",
+  projectId: "COLOQUE_SEU_PROJECT_ID",
+  storageBucket: "COLOQUE_SEU_PROJECT_ID.firebasestorage.app",
+  messagingSenderId: "COLOQUE_SEU_SENDER_ID",
+  appId: "COLOQUE_SEU_APP_ID"
+};
+
+function firebaseConfigurado(){
+  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith("COLOQUE_")
+    && FIREBASE_CONFIG.projectId && !FIREBASE_CONFIG.projectId.startsWith("COLOQUE_");
+}
+function atualizarStatusCloud(txt, online=false){
+  const el=$("cloudStatus");
+  if(el){el.textContent=online?"☁️ "+txt:"☁️ "+txt;}
+}
+function iniciarFirebase(){
+  if(!firebaseConfigurado()){
+    $("configAviso").style.display="block";
+    atualizarStatusCloud("Configure o Firebase");
+    return;
+  }
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    auth=firebase.auth(); db=firebase.firestore();
+    auth.onAuthStateChanged(async u=>{
+      usuario=u;
+      $("loginBtn").classList.toggle("hidden",!!u);
+      $("logoutBtn").classList.toggle("hidden",!u);
+      if(!u){
+        atualizarStatusCloud("Não conectado");
+        if(unsubscribeCloud){unsubscribeCloud();unsubscribeCloud=null;}
+        return;
+      }
+      atualizarStatusCloud("Conectando...",true);
+      await sincronizarLocalComNuvem();
+      ouvirNuvem();
+    });
+  }catch(e){
+    console.error(e); atualizarStatusCloud("Erro no Firebase");
+    alert("Não foi possível iniciar o Firebase. Confira a configuração.");
+  }
+}
+async function entrarGoogle(){
+  if(!auth){alert("Configure primeiro o Firebase no arquivo.");return;}
+  try{
+    const provider=new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+  }catch(e){alert("Não foi possível entrar com Google: "+(e.message||e));}
+}
+async function sairGoogle(){if(auth) await auth.signOut();}
+async function sincronizarLocalComNuvem(){
+  if(!usuario||!db)return;
+  try{
+    const snap=await db.collection("usuarios").doc(usuario.uid).collection("mascaras").get();
+    if(snap.empty && mascaras.length){
+      const batch=db.batch();
+      mascaras.forEach(m=>batch.set(db.collection("usuarios").doc(usuario.uid).collection("mascaras").doc(String(m.id)),m));
+      await batch.commit();
+    }else if(!snap.empty){
+      const cloud=snap.docs.map(d=>d.data());
+      // Mescla registros locais que ainda não existem na nuvem.
+      const ids=new Set(cloud.map(m=>String(m.id)));
+      const novos=mascaras.filter(m=>!ids.has(String(m.id)));
+      if(novos.length){
+        const batch=db.batch();
+        novos.forEach(m=>batch.set(db.collection("usuarios").doc(usuario.uid).collection("mascaras").doc(String(m.id)),m));
+        await batch.commit();
+      }
+      const finalSnap=await db.collection("usuarios").doc(usuario.uid).collection("mascaras").get();
+      mascaras=finalSnap.docs.map(d=>d.data());
+      localStorage.setItem(KEY,JSON.stringify(mascaras));
+      render();
+    }
+    atualizarStatusCloud("Online",true);
+  }catch(e){console.error(e);atualizarStatusCloud("Erro de sincronização");}
+}
+function ouvirNuvem(){
+  if(!usuario||!db)return;
+  if(unsubscribeCloud)unsubscribeCloud();
+  unsubscribeCloud=db.collection("usuarios").doc(usuario.uid).collection("mascaras")
+    .onSnapshot(snap=>{
+      mascaras=snap.docs.map(d=>d.data());
+      localStorage.setItem(KEY,JSON.stringify(mascaras));
+      render(); atualizarStatusCloud("Online",true);
+    },err=>{console.error(err);atualizarStatusCloud("Sem conexão");});
+}
+async function nuvemSalvar(m){
+  if(!usuario||!db)return;
+  await db.collection("usuarios").doc(usuario.uid).collection("mascaras").doc(String(m.id)).set(m);
+}
+async function nuvemExcluir(id){
+  if(!usuario||!db)return;
+  await db.collection("usuarios").doc(usuario.uid).collection("mascaras").doc(String(id)).delete();
+}
+async function nuvemSubstituir(lista){
+  if(!usuario||!db)return;
+  const ref=db.collection("usuarios").doc(usuario.uid).collection("mascaras");
+  const snap=await ref.get();
+  let batch=db.batch(),n=0;
+  snap.docs.forEach(d=>{batch.delete(d.ref);n++;if(n===400){batch.commit();batch=db.batch();n=0;}});
+  for(const m of lista){batch.set(ref.doc(String(m.id)),m);n++;if(n===400){await batch.commit();batch=db.batch();n=0;}}
+  if(n)await batch.commit();
+}
+
+const $=id=>document.getElementById(id);
+function hojeISO(){return new Date().toISOString().slice(0,10)}
+function agoraLocal(){
+  const d=new Date(), pad=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function salvar(){localStorage.setItem(KEY,JSON.stringify(mascaras))}
+function abrirCadastro(m=null){
+  $("cadastro").style.display="block"; editando=m?.id||null;
+  $("formTitle").textContent=m?"Editar máscara":"Nova máscara";
+  $("tipo").value=m?.tipo||"INSTALAÇÃO";
+  $("placa").value=m?.placa||"";$("plataforma").value=m?.plataforma||"";
+  $("imei").value=m?.imei||"";$("instalador").value=m?.instalador||"";
+  $("dataHora").value=m?.dataHora||agoraLocal();$("latitude").value=m?.latitude||"";
+  $("longitude").value=m?.longitude||"";$("local").value=m?.local||"";
+  $("imeiRetirado").value=m?.imeiRetirado||"";$("motivo").value=m?.motivo||"Não estava comunicando em conformidade";
+  $("obs").value=m?.obs||""; ajustarCampos(); window.scrollTo({top:0,behavior:"smooth"});
+}
+function fecharCadastro(){ $("cadastro").style.display="none"; editando=null }
+function ajustarCampos(){
+  const t=$("tipo").value, retirada=t==="RETIRADA", manut=t.startsWith("MANUTENÇÃO");
+  $("latBox").classList.toggle("hidden",retirada);$("lonBox").classList.toggle("hidden",retirada);
+  $("localBox").classList.toggle("hidden",retirada);$("dataBox").classList.toggle("hidden",retirada);
+  $("imeiRetBox").classList.toggle("hidden",!manut || t!=="MANUTENÇÃO COM TROCA");
+  $("motivoBox").classList.toggle("hidden",!manut);
+  $("instaladorBox").querySelector("label").textContent=retirada?"Retirada realizada por":"Instalação realizada por";
+}
+function salvarMascara(){
+  const placa=$("placa").value.trim();
+  if(!placa){alert("Informe a placa/chassi.");return}
+  const t=$("tipo").value;
+  const obj={
+    id:editando||Date.now(),tipo:t,placa,plataforma:$("plataforma").value.trim(),imei:$("imei").value.trim(),
+    instalador:$("instalador").value.trim(),dataHora:$("dataHora").value,latitude:$("latitude").value.trim(),
+    longitude:$("longitude").value.trim(),local:$("local").value.trim(),imeiRetirado:$("imeiRetirado").value.trim(),
+    motivo:$("motivo").value.trim(),obs:$("obs").value.trim()
+  };
+  if(editando){const i=mascaras.findIndex(x=>x.id===editando);obj.status=mascaras[i].status;obj.fechadaEm=mascaras[i].fechadaEm;mascaras[i]=obj}
+  else {obj.status="aberta";obj.criadaEm=new Date().toISOString();obj.fechadaEm=null;mascaras.push(obj)}
+  salvar();fecharCadastro();render();
+  nuvemSalvar(obj).catch(e=>{console.error(e);atualizarStatusCloud("Falha ao salvar");});
+}
+function texto(m){
+  const stars="********************************************************************************************************************************************";
+  if(m.tipo==="RETIRADA") return `${stars}\n\nRETIRADA\n- Retirada realizada por: ${m.instalador||""}\n- IMEI: ${m.imei||""}\n- PLACA: ${m.placa||""}\n- Plataforma: ${m.plataforma||""}\n\n${stars}`;
+  const linha=m.tipo==="MANUTENÇÃO COM TROCA"?"- Manutenção com troca":m.tipo==="MANUTENÇÃO SEM TROCA"?"- Manutenção sem troca":"";
+  const extra=m.tipo.startsWith("MANUTENÇÃO")?`${linha}\n- Motivo da manutenção:${m.motivo||"Não estava comunicando em conformidade"}\n`:"";
+  return `${stars}\n\n${m.tipo}\n- Instalação realizada por: ${m.instalador||""}\n- Placa/Chassi: ${m.placa||""}\n- Plataforma: ${m.plataforma||""}\n- IMEI: ${m.imei||""}\n- Data e Horário: ${formatarDataHora(m.dataHora)}\n- Latitude e Longitude: ${m.latitude||""}${m.longitude?` / ${m.longitude}`:""}\n- Local Instalado no Veículo: ${m.local||""}\n${extra}${m.tipo==="MANUTENÇÃO COM TROCA"?`- IMEI Retirado: ${m.imeiRetirado||""}\n`:""}OBS: ${m.obs||""}\n//\n${stars}`;
+}
+function formatarDataHora(v){if(!v)return"";const d=new Date(v);return isNaN(d)?v:d.toLocaleString("pt-BR")}
+function ver(id){const m=mascaras.find(x=>x.id===id);$("textoMascara").value=texto(m);$("modal").classList.add("show")}
+function fecharModal(){$("modal").classList.remove("show")}
+async function copiarModal(){await navigator.clipboard.writeText($("textoMascara").value);alert("Máscara copiada!")}
+function copiar(id){const m=mascaras.find(x=>x.id===id);navigator.clipboard.writeText(texto(m)).then(()=>alert("Máscara copiada!"))}
+function fechar(id){const m=mascaras.find(x=>x.id===id);if(!m)return;m.status="fechada";m.fechadaEm=new Date().toISOString();salvar();render();nuvemSalvar(m).catch(console.error)}
+function reabrir(id){const m=mascaras.find(x=>x.id===id);if(!m)return;m.status="aberta";m.fechadaEm=null;salvar();render();nuvemSalvar(m).catch(console.error)}
+function excluir(id){if(confirm("Excluir esta máscara?")){mascaras=mascaras.filter(x=>x.id!==id);salvar();render();nuvemExcluir(id).catch(console.error)}}
+function editar(id){abrirCadastro(mascaras.find(x=>x.id===id))}
+function dataRegistro(m){return (m.dataHora||m.criadaEm||"").slice(0,10)}
+function inicioSemana(v){
+  const d=new Date(v+"T12:00:00"), day=d.getDay(), diff=day===0?-6:1-day;
+  d.setDate(d.getDate()+diff);return d;
+}
+function contagem(lista,tipo){return lista.filter(m=>!tipo||m.tipo===tipo).length}
+function render(){
+  const busca=$("busca").value.toLowerCase(),tipo=$("filtroTipo").value,data=$("filtroData").value;
+  const filtradas=mascaras.filter(m=>(!busca||`${m.placa} ${m.imei} ${m.instalador} ${m.plataforma}`.toLowerCase().includes(busca))&&(!tipo||m.tipo===tipo)&&(!data||dataRegistro(m)===data));
+  $("lista").innerHTML=filtradas.length?filtradas.map(m=>`
+    <div class="item">
+      <div class="itemtop"><span class="plate">${m.placa}</span><span class="badge ${m.status==="fechada"?"ok":""}">${m.status==="fechada"?"FECHADO":"NÃO FECHADO"}</span></div>
+      <div class="meta">${m.tipo} · ${formatarDataHora(m.dataHora)} · ${m.plataforma||"Sem plataforma"}${m.imei?" · IMEI "+m.imei:""}</div>
+      <div class="actions">
+        <button class="btn" onclick="ver(${m.id})">Ver</button><button class="btn dark" onclick="copiar(${m.id})">Copiar</button>
+        <button class="btn gray" onclick="editar(${m.id})">Editar</button>
+        ${m.status==="fechada"?`<button class="btn gray" onclick="reabrir(${m.id})">Reabrir</button>`:`<button class="btn green" onclick="fechar(${m.id})">Fechar</button>`}
+        <button class="btn red" onclick="excluir(${m.id})">Excluir</button>
+      </div>
+    </div>`).join(""):"<div style='color:#68717c'>Nenhuma máscara encontrada.</div>";
+  const h=hojeISO(), semana=inicioSemana(h), sab=new Date(semana);sab.setDate(sab.getDate()+5);
+  const sem=mascaras.filter(m=>dataRegistro(m)>=fmt(semana)&&dataRegistro(m)<=fmt(sab));
+  $("cTotal").textContent=mascaras.length;$("cAberta").textContent=mascaras.filter(m=>m.status!=="fechada").length;
+  $("cFechada").textContent=mascaras.filter(m=>m.status==="fechada").length;$("cHoje").textContent=mascaras.filter(m=>dataRegistro(m)===h).length;
+  $("cSemana").textContent=sem.length;
+  renderRelatorio();
+}
+function fmt(d){return d.toISOString().slice(0,10)}
+function renderRelatorio(){
+  let v=$("semana").value||hojeISO();let ini=inicioSemana(v),dias=[];
+  for(let i=0;i<6;i++){let d=new Date(ini);d.setDate(ini.getDate()+i);let ds=fmt(d),arr=mascaras.filter(m=>dataRegistro(m)===ds);dias.push({ds,arr,nome:d.toLocaleDateString("pt-BR",{weekday:"long"}).replace("-feira","")})}
+  const totais=dias.flatMap(x=>x.arr);
+  const tipos=["INSTALAÇÃO","MANUTENÇÃO COM TROCA","MANUTENÇÃO SEM TROCA","RETIRADA"];
+  $("relatorio").innerHTML=`<table><thead><tr><th>Dia</th><th>Total</th>${tipos.map(t=>`<th>${t.replace("MANUTENÇÃO ","MANUT. ")}</th>`).join("")}<th>Fechadas</th><th>Pendentes</th></tr></thead><tbody>
+  ${dias.map(x=>`<tr><td><b>${x.nome}</b><br>${new Date(x.ds+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><b>${x.arr.length}</b></td>${tipos.map(t=>`<td>${contagem(x.arr,t)}</td>`).join("")}<td>${x.arr.filter(m=>m.status==="fechada").length}</td><td>${x.arr.filter(m=>m.status!=="fechada").length}</td></tr>`).join("")}
+  <tr><th>TOTAL</th><th>${totais.length}</th>${tipos.map(t=>`<th>${contagem(totais,t)}</th>`).join("")}<th>${totais.filter(m=>m.status==="fechada").length}</th><th>${totais.filter(m=>m.status!=="fechada").length}</th></tr></tbody></table>`;
+}
+function limparFiltros(){$("busca").value="";$("filtroTipo").value="";$("filtroData").value="";render()}
+function exportar(){
+  const blob=new Blob([JSON.stringify({versao:3,exportadoEm:new Date().toISOString(),mascaras},null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`backup_mascaras_${hojeISO()}.json`;a.click();URL.revokeObjectURL(a.href);
+}
+function importar(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();r.onload=async()=>{try{
+    const x=JSON.parse(r.result);if(!Array.isArray(x.mascaras))throw Error();
+    if(confirm("Substituir os dados atuais pelo backup?")){
+      mascaras=x.mascaras;salvar();render();
+      if(usuario) await nuvemSubstituir(mascaras);
+      alert(usuario?"Backup restaurado e sincronizado na nuvem.":"Backup restaurado localmente.");
+    }
+  }catch(err){console.error(err);alert("Arquivo de backup inválido.")}e.target.value=""};r.readAsText(file);
+}
+aplicarTema();iniciarFirebase();aplicarTema();$("semana").value=hojeISO();ajustarCampos();render();
+
+function aplicarTema(){
+  const escuro=localStorage.getItem("tema_mascaras")==="escuro";
+  document.body.classList.toggle("dark",escuro);
+  $("themeBtn").textContent=escuro?"☀️ Claro":"🌙 Escuro";
+}
+function alternarTema(){
+  const escuro=!document.body.classList.contains("dark");
+  document.body.classList.toggle("dark",escuro);
+  localStorage.setItem("tema_mascaras",escuro?"escuro":"claro");
+  $("themeBtn").textContent=escuro?"☀️ Claro":"🌙 Escuro";
+}
+
+</script>
+</body>
+</html>
